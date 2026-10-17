@@ -1,0 +1,32 @@
+baseURL = "https://example.org/"
+languageCode = "ja"
+title = "My Profile"
+theme = "PaperMod"
+
+[params]
+  defaultTheme = "auto"
+
+  [params.profileMode]
+    enabled = true
+    title = "Mao Takubo"
+    subtitle = "Student | LLM Research | Multimodal AI"
+
+  [[params.socialIcons]]
+    name = "github"
+    url = "https://github.com/Mao-Takubo"
+
+  [[params.socialIcons]]
+    name = "email"
+    url = "mailto:takubo@ai.cs.ehime-u.ac.jp"
+
+[[menu.main]]
+  identifier = "about"
+  name = "About"
+  url = "/about/"
+  weight = 10
+
+[[menu.main]]
+  identifier = "research"
+  name = "Research"
+  url = "/research/"
+  weight = 20
