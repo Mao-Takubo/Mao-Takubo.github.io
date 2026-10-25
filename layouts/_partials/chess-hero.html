@@ -1,0 +1,38 @@
+{{- $p := site.Params.profileMode }}
+{{- $hero := site.Params.hero | default dict }}
+<section class="chess-hero">
+  <div class="hero-copy">
+    <p class="hero-eyebrow">Researcher · Chess enthusiast</p>
+    <h1 class="hero-name">{{ $p.title | default site.Title }}</h1>
+    <p class="hero-role">{{ $hero.role | default $p.subtitle }}</p>
+    {{- with $hero.tagline }}<p class="hero-tagline">{{ . }}</p>{{ end }}
+    <nav class="hero-links" aria-label="Profile links">
+      {{- range site.Menus.main }}
+      <a class="hero-link" href="{{ .URL }}">{{ .Name }}</a>
+      {{- end }}
+    </nav>
+    {{- partial "social_icons.html" $p }}
+  </div>
+
+  <div class="chess-stage" data-chess-stage>
+    <div class="chess-fallback" aria-hidden="true">
+      <span>♜</span><span>♞</span><span>♝</span><span>♛</span><span>♚</span><span>♝</span><span>♞</span><span>♜</span>
+    </div>
+    <canvas class="chess-canvas" role="img" aria-label="Interactive 3D chessboard replaying a historic game, with a faint neural network glowing beneath it"></canvas>
+    <div class="chess-controls">
+      <p class="chess-caption" data-chess-caption></p>
+      <div class="chess-buttons">
+        <button type="button" class="chess-btn" data-chess-play aria-label="Pause playback"><span data-label>Pause</span></button>
+        <button type="button" class="chess-btn" data-chess-replay aria-label="Replay from the start"><span>Replay</span></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script type="importmap">
+{"imports":{
+  "three":"{{ "vendor/three.module.min.js" | relURL }}",
+  "chess.js":"{{ "vendor/chess.js" | relURL }}"
+}}
+</script>
+<script type="module" src="{{ "js/chess/boot.js" | relURL }}"></script>

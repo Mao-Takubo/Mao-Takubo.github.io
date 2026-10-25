@@ -1,6 +1,6 @@
-baseURL = "https://example.org/"
+baseURL = "https://mao-takubo.github.io/"
 languageCode = "ja"
-title = "My Profile"
+title = "Mao Takubo"
 theme = "PaperMod"
 
 [params]
@@ -10,6 +10,10 @@ theme = "PaperMod"
     enabled = true
     title = "Mao Takubo"
     subtitle = "Student | LLM Research | Multimodal AI"
+
+  [params.hero]
+    role = "Student · LLM Research · Multimodal AI"
+    tagline = "Exploring learning, reasoning, and intelligence."
 
   [[params.socialIcons]]
     name = "github"

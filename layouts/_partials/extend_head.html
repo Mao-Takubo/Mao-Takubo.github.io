@@ -1,0 +1,4 @@
+{{- if .IsHome }}
+{{- $css := resources.Get "css/chess-hero.css" | minify | fingerprint }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}">
+{{- end }}
