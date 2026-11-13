@@ -91,6 +91,13 @@ const builders: Record<PanelId, Builder> = {
       ul.append(li);
     }
     out.push(ul);
+    const credit = el("p", "meta credit");
+    credit.append(
+      "音声合成：Open JTalk / pyopenjtalk-plus、HTS Voice \"Mei\"（MMDAgent Project Team）。Voice model © 2009–2013 Nagoya Institute of Technology / ",
+      link("CC BY 3.0", "https://creativecommons.org/licenses/by/3.0/"),
+      "。ピッチ・速度の変更と音響エフェクトを適用しています。本人の声ではありません。",
+    );
+    out.push(credit);
     return out;
   },
 };

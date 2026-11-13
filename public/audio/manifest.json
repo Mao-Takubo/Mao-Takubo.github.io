@@ -1,12 +1,42 @@
 {
-  "welcome": { "text": "何をする？", "path": null },
-  "status": { "text": "ステータスを表示する", "path": null },
-  "research": { "text": "研究内容を表示する", "path": null },
-  "publications": { "text": "業績を表示する", "path": null },
-  "projects": { "text": "プロジェクトを表示する", "path": null },
-  "contact": { "text": "連絡先を表示する", "path": null },
-  "help": { "text": "選べる項目を表示する", "path": null },
-  "back": { "text": "ホームに戻る", "path": null },
-  "unknown": { "text": "もう一度話すか、項目を選んでください", "path": null },
-  "ambiguous": { "text": "項目を一つ選んでください", "path": null }
+  "welcome": {
+    "text": "何をする？",
+    "path": "audio/welcome.mp3"
+  },
+  "status": {
+    "text": "ステータスを表示する",
+    "path": "audio/status.mp3"
+  },
+  "research": {
+    "text": "研究内容を表示する",
+    "path": "audio/research.mp3"
+  },
+  "publications": {
+    "text": "業績を表示する",
+    "path": "audio/publications.mp3"
+  },
+  "projects": {
+    "text": "プロジェクトを表示する",
+    "path": "audio/projects.mp3"
+  },
+  "contact": {
+    "text": "連絡先を表示する",
+    "path": "audio/contact.mp3"
+  },
+  "help": {
+    "text": "選べる項目を表示する",
+    "path": "audio/help.mp3"
+  },
+  "back": {
+    "text": "ホームに戻る",
+    "path": "audio/back.mp3"
+  },
+  "unknown": {
+    "text": "もう一度話すか、項目を選んで",
+    "path": "audio/unknown.mp3"
+  },
+  "ambiguous": {
+    "text": "項目を一つ選んで",
+    "path": "audio/ambiguous.mp3"
+  }
 }
