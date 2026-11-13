@@ -126,10 +126,8 @@ button { font: inherit; color: inherit; }
   max-height: min(70vh, 640px);
   display: flex;
   filter: drop-shadow(0 0 18px color-mix(in srgb, var(--glow) 22%, transparent));
-  opacity: 0; transform: translate(24px, -50%);
-  transition: opacity 0.28s ease, transform 0.28s ease;
+  transform: translateY(-50%);
 }
-.panel.is-open { opacity: 1; transform: translate(0, -50%); }
 .panel-inner {
   position: relative; display: flex; flex-direction: column; min-height: 0; width: 100%;
   padding: 1.2rem 1.4rem 1.4rem;
@@ -160,6 +158,15 @@ button { font: inherit; color: inherit; }
 .help-item { background: none; border: 1px solid var(--line); padding: 0.25rem 0.8rem; min-height: 36px; cursor: pointer; }
 .help-item:hover { border-color: var(--glow); color: var(--highlight); }
 
+/* ---------- panel spawn: a copy of the core flies out and becomes the frame ---------- */
+.spawn-orb {
+  position: fixed; left: 0; top: 0; z-index: 3; width: 56px; height: 56px; border-radius: 50%;
+  pointer-events: none; will-change: transform, opacity; mix-blend-mode: screen;
+  background: radial-gradient(circle, var(--highlight) 0%, var(--glow) 38%, transparent 70%);
+  box-shadow: 0 0 36px var(--glow), 0 0 90px color-mix(in srgb, var(--glow) 55%, transparent);
+}
+.spawn-orb::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; border: 1px solid var(--highlight); opacity: 0.7; }
+
 /* ---------- CSS fallback core (no WebGL) ---------- */
 .core-fallback { display: none; position: absolute; left: 50%; top: 44%; width: min(46vmin, 360px); aspect-ratio: 1; transform: translate(-50%, -50%); transition: left 0.5s, top 0.5s, width 0.5s; }
 .no-webgl .core-fallback { display: block; }
@@ -176,8 +183,7 @@ button { font: inherit; color: inherit; }
   .hud-top { padding: 0.8rem 1rem; }
   .owner { display: none; }
   .ring-ctl { top: 2.6rem; }
-  .panel { left: 3vw; right: 3vw; width: auto; top: auto; bottom: 0; max-height: 100%; transform: translateY(24px); }
-  .panel.is-open { transform: none; }
+  .panel { left: 3vw; right: 3vw; width: auto; top: auto; bottom: 0; max-height: 100%; transform: none; }
   .stage { position: relative; }
   .panel { height: min(100%, 46vh); }
   .subtitle { font-size: 1rem; }

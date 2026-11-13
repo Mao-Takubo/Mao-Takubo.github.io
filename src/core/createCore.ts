@@ -14,6 +14,10 @@ export interface Core {
   setVoiceState(state: VoiceState): void;
   /** move the ring by whole steps (+1 = next core, from the right) */
   step(delta: number): void;
+  /** client coordinates where the front core will sit for a given focus */
+  screenPosition(focus: CoreFocus): { x: number; y: number };
+  /** brief excitement burst (e.g. when a panel is spawned) */
+  pulse(): void;
   select(index: number): void;
   dispose(): void;
 }
@@ -119,12 +123,12 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
   }
 
   // --- layout / focus ---
-  let focus: CoreFocus = "center";
+  let focusState: CoreFocus = "center";
   let aspect = 1;
   const pos = new THREE.Vector3();
   let scale = 1;
   const visibleHalfH = Math.tan(THREE.MathUtils.degToRad(FOV / 2)) * CAMERA_Z;
-  function focusTarget(): { x: number; y: number; s: number } {
+  function focusTarget(focus: CoreFocus = focusState): { x: number; y: number; s: number } {
     const halfW = visibleHalfH * aspect;
     const fit = Math.min(1, halfW / 2.7, visibleHalfH / 2.7);
     if (focus === "side") return { x: -halfW * 0.4, y: 0, s: fit * 0.62 };
@@ -246,6 +250,7 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
   // --- loop ---
   let voiceState: VoiceState = "idle";
   let energy = 0;
+  let kick = 0; // decaying burst from pulse()
   let raf = 0;
   let last = performance.now();
   let t = 0;
@@ -275,9 +280,10 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
     const level = opts.getLevel(dt);
     const eTarget = voiceState === "listening" ? 0.6 : voiceState === "speaking" ? 0.35 : 0;
     energy += (eTarget - energy) * (1 - Math.exp(-dt * 4));
-    const boost = level + energy;
+    kick *= Math.exp(-dt * 2.5);
+    const boost = level + energy + kick * 0.9;
 
-    const frameInfo = { dt, t, level, energy, motion, reduceMotion: opts.reduceMotion, quality: q };
+    const frameInfo = { dt, t, level, energy: energy + kick, motion, reduceMotion: opts.reduceMotion, quality: q };
     cores.forEach((c, i) => {
       const d = Math.abs(mod(i - ringPos + N / 2, N) - N / 2); // distance in steps from the front
       const a = clamp01(1 - d);
@@ -326,7 +332,16 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
 
   return {
     setFocus(f) {
-      focus = f;
+      focusState = f;
+    },
+    screenPosition(f) {
+      const ft = focusTarget(f);
+      const v = new THREE.Vector3(ft.x, ft.y, 0).project(camera);
+      const r = canvas.getBoundingClientRect();
+      return { x: r.left + (v.x * 0.5 + 0.5) * r.width, y: r.top + (-v.y * 0.5 + 0.5) * r.height };
+    },
+    pulse() {
+      kick = 1;
     },
     setVoiceState(s) {
       voiceState = s;

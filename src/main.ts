@@ -57,7 +57,18 @@ const recognizer = createRecognizer();
 const store = createStore(initialState(recognizer.supported, readMuted()));
 const controller = createController(store, voice, recognizer);
 const nav = createNavigation(store, controller);
-createPanels(store, controller, nav.speakButton);
+const stackedFocus = () => (stacked.matches ? "top" : "side");
+createPanels(
+  store,
+  controller,
+  nav.speakButton,
+  () => {
+    if (core) return core.screenPosition(stackedFocus());
+    const r = required<HTMLElement>(".core-fallback").getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  },
+  () => core?.pulse(),
+);
 
 let paletteIndex = readIndex();
 const ringLabel = required<HTMLElement>("#ring-label");

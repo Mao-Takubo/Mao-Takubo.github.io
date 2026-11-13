@@ -102,21 +102,91 @@ const builders: Record<PanelId, Builder> = {
   },
 };
 
-const CLOSE_MS = 280;
+const REVEAL_DELAY = 700; // ms before the frame starts to grow
+const REVEAL_MS = 650;
 
-export function createPanels(store: Store, ctl: Controller, fallbackFocus: HTMLElement) {
+interface Origin {
+  x: number;
+  y: number;
+}
+
+/**
+ * Opening: a copy of the core pulls away, flies to where the panel will be, and
+ * dissolves into it as the frame grows from a line; content then fades in.
+ */
+export function createPanels(store: Store, ctl: Controller, fallbackFocus: HTMLElement, getOrigin: () => Origin | null, onSpawn?: () => void) {
+  const app = required<HTMLElement>("#app");
   const panel = required<HTMLElement>("#panel");
+  const inner = required<HTMLElement>(".panel-inner", panel);
   const tag = required<HTMLElement>("#panel-tag", panel);
   const title = required<HTMLElement>("#panel-title", panel);
   const body = required<HTMLElement>("#panel-body", panel);
   required<HTMLButtonElement>("#panel-close", panel).addEventListener("click", () => ctl.dispatchCommand("back", "click"));
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
   let returnTo: HTMLElement | null = null;
-  let closeTimer = 0;
   let shown: PanelId | null = null;
+  let running: Animation[] = [];
+  let orb: HTMLElement | null = null;
+
+  function cancelRunning() {
+    running.forEach((a) => a.cancel());
+    running = [];
+    orb?.remove();
+    orb = null;
+  }
+  const play = (target: Element, keyframes: Keyframe[], options: KeyframeAnimationOptions) => {
+    const a = target.animate(keyframes, { fill: "backwards", ...options });
+    running.push(a);
+    return a;
+  };
+  const contentItems = () => [...panel.querySelectorAll<HTMLElement>(".panel-head > *, .panel-body > *")];
+
+  function revealContent(startAt: number, each = 70, duration = 450) {
+    contentItems().forEach((node, i) =>
+      play(node, [{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], {
+        delay: startAt + Math.min(i, 8) * each,
+        duration,
+        easing: "cubic-bezier(.2,.7,.2,1)",
+      }),
+    );
+  }
+
+  function spawnAndGrow() {
+    const rect = panel.getBoundingClientRect();
+    const to = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    const from = getOrigin() ?? { x: innerWidth * 0.3, y: innerHeight * 0.5 };
+    const half = 28;
+    const at = (x: number, y: number, scale: number) => `translate(${x - half}px, ${y - half}px) scale(${scale})`;
+    const mid = { x: from.x + (to.x - from.x) * 0.5, y: Math.min(from.y, to.y) - Math.min(90, innerHeight * 0.12) };
+
+    orb = el("div", "spawn-orb");
+    app.append(orb);
+    onSpawn?.();
+    play(orb, [
+      { transform: at(from.x, from.y, 0.15), opacity: 0, offset: 0 },
+      { transform: at(from.x, from.y, 1), opacity: 1, offset: 0.2 },
+      { transform: at(mid.x, mid.y, 0.9), opacity: 1, offset: 0.6 },
+      { transform: at(to.x, to.y, 1.1), opacity: 1, offset: 0.9 },
+      { transform: at(to.x, to.y, 3.2), opacity: 0, offset: 1 },
+    ], { duration: REVEAL_DELAY + 450, easing: "cubic-bezier(.45,.05,.25,1)", fill: "both" }).finished.then(() => orb?.remove(), () => {});
+
+    // the frame grows from a thin line at the orb's landing point
+    const glowFilter = getComputedStyle(panel).filter;
+    play(panel, [
+      { clipPath: "inset(50% 50% 50% 50%)", opacity: 0, filter: "drop-shadow(0 0 0 transparent)", offset: 0 },
+      { clipPath: "inset(50% 0% 50% 0%)", opacity: 1, offset: 0.35 },
+      { clipPath: "inset(0% 0% 0% 0%)", opacity: 1, filter: glowFilter, offset: 1 },
+    ], { delay: REVEAL_DELAY, duration: REVEAL_MS, easing: "cubic-bezier(.3,.6,.2,1)" });
+    const line = getComputedStyle(inner).borderTopColor;
+    play(inner, [{ borderColor: getComputedStyle(document.documentElement).getPropertyValue("--highlight").trim() || line }, { borderColor: line }], {
+      delay: REVEAL_DELAY, duration: REVEAL_MS + 500, easing: "ease-out",
+    });
+    revealContent(REVEAL_DELAY + REVEAL_MS * 0.7);
+  }
 
   function show(id: PanelId, wasOpen: boolean) {
-    window.clearTimeout(closeTimer);
+    cancelRunning();
     const m = menuById(id);
     tag.textContent = m.en;
     title.textContent = m.label;
@@ -125,23 +195,39 @@ export function createPanels(store: Store, ctl: Controller, fallbackFocus: HTMLE
     panel.hidden = false;
     if (!wasOpen) {
       const active = document.activeElement;
-      returnTo = active instanceof HTMLElement && !panel.contains(active) ? active : null;
-      void panel.offsetWidth; // let the closed style apply before transitioning
+      returnTo = active instanceof HTMLElement && active !== document.body && !panel.contains(active) ? active : null;
     }
-    panel.classList.add("is-open");
     title.focus({ preventScroll: true });
+    if (reduceMotion.matches) return;
+    if (wasOpen) revealContent(0, 50, 350); // already open: just re-form the contents
+    else spawnAndGrow();
   }
 
   function hide() {
-    panel.classList.remove("is-open");
+    cancelRunning();
     const target = returnTo && returnTo.isConnected && !returnTo.closest("[hidden]") ? returnTo : fallbackFocus;
     returnTo = null;
-    const inside = panel.contains(document.activeElement);
-    if (inside) target.focus({ preventScroll: true });
-    window.clearTimeout(closeTimer);
-    closeTimer = window.setTimeout(() => {
-      if (!store.get().activePanel) panel.hidden = true;
-    }, CLOSE_MS);
+    if (panel.contains(document.activeElement)) target.focus({ preventScroll: true });
+    if (reduceMotion.matches) {
+      panel.hidden = true;
+      return;
+    }
+    const closing = panel.animate(
+      [
+        { clipPath: "inset(0% 0% 0% 0%)", opacity: 1 },
+        { clipPath: "inset(50% 0% 50% 0%)", opacity: 1, offset: 0.55 },
+        { clipPath: "inset(50% 50% 50% 50%)", opacity: 0 },
+      ],
+      { duration: 380, easing: "cubic-bezier(.5,0,.8,.4)", fill: "forwards" },
+    );
+    running.push(closing);
+    closing.finished.then(
+      () => {
+        if (!store.get().activePanel) panel.hidden = true;
+        closing.cancel();
+      },
+      () => {},
+    );
   }
 
   store.subscribe((s) => {
