@@ -39,7 +39,6 @@ export function createNavigation(store: Store, ctl: Controller): Navigation {
   replay.addEventListener("click", () => ctl.replayBlocked());
   bootStart.addEventListener("click", () => ctl.boot(false));
   bootSilent.addEventListener("click", () => ctl.boot(true));
-  required<HTMLElement>("#core-canvas").addEventListener("click", () => ctl.boot(false));
 
   function announce(text: string) {
     live.textContent = "";

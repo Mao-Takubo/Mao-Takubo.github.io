@@ -15,14 +15,17 @@
 
       <header class="hud-top">
         <span class="brand">MAO CORE</span>
-        <div class="hud-right">
-          <span class="owner">Mao Takubo / 田窪真大</span>
-          <div id="palette" class="palette" role="group" aria-label="コアの色"></div>
-        </div>
+        <span class="owner">Mao Takubo / 田窪真大</span>
       </header>
 
+      <div class="ring-ctl" role="group" aria-label="コアの色">
+        <button id="ring-prev" type="button" class="ring-btn" aria-label="前のコア">‹</button>
+        <span id="ring-label" class="ring-label"></span>
+        <button id="ring-next" type="button" class="ring-btn" aria-label="次のコア">›</button>
+      </div>
+
       <div id="boot" class="boot">
-        <p class="boot-hint">コアに話しかけて、プロフィールや研究を開きます</p>
+        <p class="boot-hint">コアに話しかけて、プロフィールや研究を開きます<br /><span class="boot-hint-sub">左右にスワイプ（ドラッグ）で、コアの色を変えられます</span></p>
         <div class="boot-actions">
           <button id="boot-start" type="button" class="btn btn-primary">クリックして起動</button>
           <button id="boot-silent" type="button" class="btn">音声なしで見る</button>

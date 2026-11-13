@@ -32,7 +32,6 @@ button { font: inherit; color: inherit; }
     var(--bg);
 }
 #core-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
-.is-booted #core-canvas { cursor: default; }
 .hud-top, .stage, .hud-bottom, .boot { position: relative; z-index: 1; }
 
 /* ---------- top ---------- */
@@ -40,21 +39,22 @@ button { font: inherit; color: inherit; }
 .brand { font-family: var(--mono); letter-spacing: 0.3em; font-size: 0.8rem; color: var(--glow); }
 .owner { font-size: 0.8rem; color: var(--text-dim); }
 
-/* ---------- colour picker ---------- */
-.hud-right { display: flex; align-items: center; gap: 1rem; pointer-events: auto; }
-.palette { display: flex; gap: 0.15rem; }
-.swatch {
-  width: 34px; height: 34px; padding: 0; border: 0; background: none; cursor: pointer;
-  display: grid; place-items: center;
+/* ---------- core ring control ---------- */
+.ring-ctl {
+  position: absolute; z-index: 2; top: 3rem; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 0.4rem;
+  font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.22em; color: var(--text-dim);
+  text-shadow: 0 0 6px var(--bg), 0 0 12px var(--bg);
 }
-.swatch::before {
-  content: ""; width: 16px; height: 16px; border-radius: 50%;
-  background: var(--swatch); border: 1px solid rgba(255, 255, 255, 0.35);
-  transition: transform 0.2s, box-shadow 0.2s;
+.ring-label { min-width: 9.5em; text-align: center; }
+.ring-label b { color: var(--glow); font-weight: 600; }
+.ring-btn {
+  width: 44px; height: 44px; border: 1px solid transparent; background: none; cursor: pointer;
+  font-size: 1.6rem; line-height: 1; color: var(--text-dim); transition: color 0.2s, border-color 0.2s;
 }
-.swatch:hover::before { transform: scale(1.2); }
-.swatch[aria-pressed="true"]::before { transform: scale(1.25); box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--highlight), 0 0 12px var(--swatch); }
-.swatch[data-id="rainbow"] { --swatch: conic-gradient(#ff3b4e, #ffd23b, #2dff8e, #28d7ff, #a56bff, #ff3b4e); }
+.ring-btn:hover { color: var(--glow); border-color: var(--line); }
+#core-canvas { touch-action: pan-y; cursor: grab; }
+#core-canvas:active { cursor: grabbing; }
 
 /* ---------- boot ---------- */
 .boot {
@@ -63,7 +63,8 @@ button { font: inherit; color: inherit; }
   display: grid; justify-items: center; gap: 1rem;
   padding: 0 1rem; text-align: center;
 }
-.boot-hint { margin: 0; color: var(--text-dim); font-size: 0.9rem; }
+.boot-hint { margin: 0; color: var(--text-dim); font-size: 0.9rem; line-height: 1.7; }
+.boot-hint-sub { font-size: 0.78rem; opacity: 0.85; }
 .boot-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
 
 /* ---------- buttons ---------- */
@@ -87,7 +88,7 @@ button { font: inherit; color: inherit; }
 /* ---------- bottom HUD ---------- */
 .hud-bottom {
   display: grid; justify-items: center; gap: 0.5rem;
-  padding: 0 1rem 1rem;
+  padding: 0 1rem 1rem; pointer-events: none;
   opacity: 0; visibility: hidden; transform: translateY(8px);
   transition: opacity 0.4s, transform 0.4s, visibility 0s 0.4s;
 }
@@ -116,7 +117,8 @@ button { font: inherit; color: inherit; }
 .privacy { margin: 0; font-size: 0.68rem; color: var(--text-dim); opacity: 0.8; text-align: center; }
 
 /* ---------- panel ---------- */
-.stage { min-height: 0; }
+.stage { min-height: 0; pointer-events: none; }
+.panel, .hud-bottom > * { pointer-events: auto; }
 .panel {
   position: absolute;
   right: 4vw; top: 50%;
@@ -173,8 +175,7 @@ button { font: inherit; color: inherit; }
 @media (max-width: 820px), (max-aspect-ratio: 1/1) {
   .hud-top { padding: 0.8rem 1rem; }
   .owner { display: none; }
-  .hud-top { padding: 0.5rem 0.4rem 0.5rem 1rem; }
-  .swatch { width: 30px; height: 36px; }
+  .ring-ctl { top: 2.6rem; }
   .panel { left: 3vw; right: 3vw; width: auto; top: auto; bottom: 0; max-height: 100%; transform: translateY(24px); }
   .panel.is-open { transform: none; }
   .stage { position: relative; }

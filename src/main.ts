@@ -1,5 +1,5 @@
 import "./styles/main.css";
-import { applyPaletteToCss, applyThemeToCss, defaultPalette, palettes, rainbowCss, rainbowHue, type Palette } from "./config/theme";
+import { applyPaletteToCss, applyThemeToCss, defaultPalette, palettes, rainbowCss, rainbowHue } from "./config/theme";
 import { createStore, initialState } from "./app/state";
 import { createController } from "./app/commands";
 import { createAudioLevel } from "./core/audioReactive";
@@ -8,13 +8,13 @@ import { createVoice } from "./services/voice";
 import { createRecognizer } from "./services/recognition";
 import { createNavigation } from "./ui/navigation";
 import { createPanels } from "./ui/panels";
-import { createPalettePicker } from "./ui/palette";
 import { required } from "./ui/dom";
 
 /** Keep in sync with the stacked-layout @media query in main.css. */
 const STACKED = "(max-width: 820px), (max-aspect-ratio: 1/1)";
 const MUTE_KEY = "mao-core:muted";
 const PALETTE_KEY = "mao-core:palette";
+const N = palettes.length;
 
 function readMuted(): boolean {
   try {
@@ -31,11 +31,12 @@ function saveMuted(m: boolean) {
   }
 }
 
-function readPalette(): Palette {
+function readIndex(): number {
   try {
-    return palettes.find((p) => p.id === localStorage.getItem(PALETTE_KEY)) ?? defaultPalette;
+    const i = palettes.findIndex((p) => p.id === localStorage.getItem(PALETTE_KEY));
+    return i >= 0 ? i : palettes.indexOf(defaultPalette);
   } catch {
-    return defaultPalette;
+    return palettes.indexOf(defaultPalette);
   }
 }
 
@@ -58,12 +59,43 @@ const controller = createController(store, voice, recognizer);
 const nav = createNavigation(store, controller);
 createPanels(store, controller, nav.speakButton);
 
+let paletteIndex = readIndex();
+const ringLabel = required<HTMLElement>("#ring-label");
+const live = required<HTMLElement>("#sr-live");
+let rainbowTimer = 0;
+
+/** HUD / panel colours, label and saved choice follow the core in front. */
+function applyIndex(index: number, announce = true) {
+  paletteIndex = index;
+  const p = palettes[index]!;
+  window.clearInterval(rainbowTimer);
+  if (p.rainbow) {
+    const tick = () => applyPaletteToCss(rainbowCss(rainbowHue(performance.now() / 1000, reduceMotion.matches)));
+    tick();
+    if (!reduceMotion.matches) rainbowTimer = window.setInterval(() => !document.hidden && tick(), 100);
+  } else {
+    applyPaletteToCss(p);
+  }
+  ringLabel.replaceChildren(`${index + 1} / ${N}  `, Object.assign(document.createElement("b"), { textContent: p.label }));
+  if (announce) live.textContent = `コアの色: ${p.label}`;
+  try {
+    localStorage.setItem(PALETTE_KEY, p.id);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 const core = createCore(canvas, {
+  palettes,
+  initialIndex: paletteIndex,
+  onSelect: (i) => applyIndex(i),
+  onTap: () => controller.boot(false),
   getLevel: (dt) => level.read(dt),
   reduceMotion: reduceMotion.matches,
   onContextLost: () => html.classList.add("no-webgl"),
   onContextRestored: () => html.classList.remove("no-webgl"),
 });
+applyIndex(paletteIndex, false);
 if (!core) html.classList.add("no-webgl");
 
 function focusFor(): CoreFocus {
@@ -83,32 +115,21 @@ store.subscribe((s, prev) => {
 stacked.addEventListener("change", syncCore);
 syncCore();
 
-// --- core colour: chosen palette, remembered; rainbow also recolours the HUD ---
-let rainbowTimer = 0;
-function setPalette(p: Palette) {
-  window.clearInterval(rainbowTimer);
-  core?.setPalette(p);
-  if (p.rainbow) {
-    const tick = () => applyPaletteToCss(rainbowCss(rainbowHue(performance.now() / 1000, reduceMotion.matches)));
-    tick();
-    if (!reduceMotion.matches) rainbowTimer = window.setInterval(() => !document.hidden && tick(), 100);
-  } else {
-    applyPaletteToCss(p);
-  }
-  try {
-    localStorage.setItem(PALETTE_KEY, p.id);
-  } catch {
-    /* storage unavailable */
-  }
+// --- ring controls: buttons and arrow keys (drag/swipe/wheel live in the core) ---
+function stepRing(delta: number) {
+  if (core) core.step(delta);
+  else applyIndex(((paletteIndex + delta) % N + N) % N); // no WebGL: colours only
 }
-const initialPalette = readPalette();
-createPalettePicker(initialPalette, setPalette);
-setPalette(initialPalette);
+required<HTMLButtonElement>("#ring-prev").addEventListener("click", () => stepRing(-1));
+required<HTMLButtonElement>("#ring-next").addEventListener("click", () => stepRing(1));
 
 void voice.load();
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") controller.escape();
+  else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.altKey && !e.ctrlKey && !e.metaKey) {
+    stepRing(e.key === "ArrowRight" ? 1 : -1);
+  }
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) controller.onHidden();

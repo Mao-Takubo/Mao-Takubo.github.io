@@ -3,19 +3,28 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { qualities, theme, rainbowHue, type Palette, type Quality } from "../config/theme";
+import { qualities, theme, type Palette, type Quality } from "../config/theme";
 import type { VoiceState } from "../app/state";
+import { createCoreInstance, createSharedParts, disposeSharedParts, type CoreInstance } from "./coreInstance";
 
 export type CoreFocus = "center" | "side" | "top";
 
 export interface Core {
   setFocus(focus: CoreFocus): void;
   setVoiceState(state: VoiceState): void;
-  setPalette(palette: Palette): void;
+  /** move the ring by whole steps (+1 = next core, from the right) */
+  step(delta: number): void;
+  select(index: number): void;
   dispose(): void;
 }
 
 export interface CoreOptions {
+  palettes: Palette[];
+  initialIndex: number;
+  /** called whenever the core in front changes (also while dragging) */
+  onSelect(index: number): void;
+  /** a tap/click that did not drag the ring */
+  onTap(): void;
   /** smoothed 0..1 voice level; called once per frame */
   getLevel(dt: number): number;
   reduceMotion: boolean;
@@ -26,6 +35,11 @@ export interface CoreOptions {
 const CAMERA_Z = 7;
 const FOV = 40;
 const TAU = Math.PI * 2;
+const RING_RADIUS = 6;
+const RING_TILT = 0.42;
+const DRAG_PX_PER_STEP = 260;
+const mod = (n: number, m: number) => ((n % m) + m) % m;
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 function roundSprite(): THREE.CanvasTexture {
   const c = document.createElement("canvas");
@@ -55,137 +69,32 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
     return null;
   }
 
-  const palette = {
-    glow: new THREE.Color(theme.glow),
-    highlight: new THREE.Color(theme.highlight),
-    line: new THREE.Color(theme.line),
-  };
-  const { glow, highlight, line } = palette;
-  let rainbow = false;
+  const N = opts.palettes.length;
+  const STEP = TAU / N;
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(theme.bg, CAMERA_Z - 1.5, CAMERA_Z + 3.2); // dims the far side of the core
-  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 50);
+  scene.fog = new THREE.Fog(theme.bg, CAMERA_Z - 1.5, CAMERA_Z + 16); // far cores in the ring fade into the dark
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 60);
   camera.position.z = CAMERA_Z;
 
+  // root (focus move/scale, parallax) > tilt (Saturn-like slant) > spin (rotates with the ring position) > cores
   const root = new THREE.Group();
+  const tilt = new THREE.Group();
+  const spin = new THREE.Group();
   scene.add(root);
-  const disposables: { dispose(): void }[] = [];
-  const track = <T extends { dispose(): void }>(x: T): T => (disposables.push(x), x);
+  root.add(tilt);
+  tilt.add(spin);
+  tilt.rotation.x = RING_TILT;
+  tilt.position.set(0, RING_RADIUS * Math.sin(RING_TILT), -RING_RADIUS * Math.cos(RING_TILT)); // front core sits at the origin
 
-  // --- centre: small bright sphere + soft halo ---
-  const heartMat = track(new THREE.MeshBasicMaterial({ color: highlight.clone().lerp(glow, 0.5), fog: false }));
-  const heart = new THREE.Mesh(track(new THREE.SphereGeometry(0.26, 32, 24)), heartMat);
-  const haloMat = track(
-    new THREE.MeshBasicMaterial({ color: glow, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
-  );
-  const halo = new THREE.Mesh(track(new THREE.SphereGeometry(0.62, 32, 24)), haloMat);
-  root.add(heart, halo);
-
-  // --- wireframe shells ---
-  const shellGeo = track(new THREE.IcosahedronGeometry(1.3, 2));
-  const shellMat = track(new THREE.MeshBasicMaterial({ color: glow, wireframe: true, transparent: true, opacity: 0.3 }));
-  const shell = new THREE.Mesh(shellGeo, shellMat);
-  const outerGeo = track(new THREE.IcosahedronGeometry(1.75, 1));
-  const outerMat = track(new THREE.MeshBasicMaterial({ color: line, wireframe: true, transparent: true, opacity: 0.35 }));
-  const outer = new THREE.Mesh(outerGeo, outerMat);
-  root.add(shell, outer);
-
-  // --- rings: differing thickness, partial arcs, own axis and speed ---
-  const ringSpecs = [
-    { r: 1.55, tube: 0.012, arc: TAU, tilt: [1.2, 0.2], speed: 0.35, role: "glow" },
-    { r: 1.95, tube: 0.022, arc: 4.4, tilt: [0.4, 0.9], speed: -0.22, role: "highlight" },
-    { r: 2.25, tube: 0.008, arc: TAU, tilt: [-0.9, 0.5], speed: 0.14, role: "line" },
-    { r: 1.2, tube: 0.03, arc: 2.3, tilt: [0.1, -1.1], speed: 0.6, role: "glow" },
-  ] as const;
-  const rings = ringSpecs.map((s) => {
-    const mat = track(new THREE.MeshBasicMaterial({ color: palette[s.role], transparent: true, opacity: 0.85 }));
-    const mesh = new THREE.Mesh(track(new THREE.TorusGeometry(s.r, s.tube, 8, 160, s.arc)), mat);
-    const pivot = new THREE.Group();
-    pivot.rotation.set(s.tilt[0], s.tilt[1], 0);
-    pivot.add(mesh);
-    root.add(pivot);
-    return { mesh, mat, role: s.role, speed: s.speed };
+  const shared = createSharedParts(roundSprite());
+  const cores: (CoreInstance & { dispose(): void })[] = opts.palettes.map((p, i) => {
+    const c = createCoreInstance(p, shared);
+    c.group.position.set(RING_RADIUS * Math.sin(i * STEP), 0, RING_RADIUS * Math.cos(i * STEP));
+    c.pick.userData.index = i;
+    spin.add(c.group);
+    return c;
   });
-
-  // --- links between the two shells (static; thinned by quality) ---
-  const maxLinks = qualities.standard.links;
-  const linkPos = new Float32Array(maxLinks * 6);
-  {
-    const a = shellGeo.attributes.position!;
-    const b = outerGeo.attributes.position!;
-    let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const va = new THREE.Vector3();
-    const vb = new THREE.Vector3();
-    for (let i = 0; i < maxLinks; i++) {
-      va.fromBufferAttribute(a, Math.floor(rnd() * a.count));
-      let best = Infinity;
-      for (let t = 0; t < 12; t++) {
-        const cand = new THREE.Vector3().fromBufferAttribute(b, Math.floor(rnd() * b.count));
-        const d = cand.distanceTo(va);
-        if (d < best) { best = d; vb.copy(cand); }
-      }
-      va.toArray(linkPos, i * 6);
-      vb.toArray(linkPos, i * 6 + 3);
-    }
-  }
-  const linkGeo = track(new THREE.BufferGeometry());
-  linkGeo.setAttribute("position", new THREE.BufferAttribute(linkPos, 3));
-  const linkMat = track(new THREE.LineBasicMaterial({ color: glow, transparent: true, opacity: 0.22 }));
-  root.add(new THREE.LineSegments(linkGeo, linkMat));
-
-  // --- particles: orbiting points, updated on the CPU ---
-  const maxParticles = qualities.standard.particles;
-  const pPos = new Float32Array(maxParticles * 3);
-  const orbit = Array.from({ length: maxParticles }, () => ({
-    r: 1.5 + Math.random() * 1.6,
-    a: Math.random() * TAU,
-    tilt: (Math.random() - 0.5) * 2.2,
-    speed: (0.08 + Math.random() * 0.25) * (Math.random() < 0.5 ? -1 : 1),
-    wob: Math.random() * TAU,
-  }));
-  const pGeo = track(new THREE.BufferGeometry());
-  pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
-  const dot = track(roundSprite());
-  const pColors = new Float32Array(maxParticles * 3).fill(1);
-  pGeo.setAttribute("color", new THREE.BufferAttribute(pColors, 3));
-  const pMat = track(
-    new THREE.PointsMaterial({ map: dot, color: highlight, vertexColors: true, size: 0.07, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }),
-  );
-  root.add(new THREE.Points(pGeo, pMat));
-
-  // --- colour: fixed palette, or a rainbow recomputed every frame ---
-  const tmp = new THREE.Color();
-  const hsl = (h: number, sat: number, light: number) => tmp.setHSL(((h % 1) + 1) % 1, sat, light, THREE.SRGBColorSpace);
-  function paintStatic() {
-    heartMat.color.copy(highlight).lerp(glow, 0.5);
-    haloMat.color.copy(glow);
-    shellMat.color.copy(glow);
-    outerMat.color.copy(line);
-    for (const r of rings) r.mat.color.copy(palette[r.role]);
-    linkMat.color.copy(glow);
-    pMat.color.copy(highlight);
-    pColors.fill(1);
-    pGeo.attributes.color!.needsUpdate = true;
-  }
-  function paintRainbow(t: number, count: number) {
-    const h = rainbowHue(t, opts.reduceMotion);
-    heartMat.color.copy(hsl(h, 1, 0.8));
-    haloMat.color.copy(hsl(h, 1, 0.55));
-    shellMat.color.copy(hsl(h + 0.08, 1, 0.55));
-    outerMat.color.copy(hsl(h + 0.5, 0.8, 0.4));
-    rings.forEach((r, i) => r.mat.color.copy(hsl(h + i * 0.22, 1, r.role === "line" ? 0.45 : 0.6)));
-    linkMat.color.copy(hsl(h + 0.3, 1, 0.55));
-    pMat.color.setRGB(1, 1, 1);
-    for (let i = 0; i < count; i++) {
-      hsl(h + i / count, 1, 0.65);
-      pColors[i * 3] = tmp.r;
-      pColors[i * 3 + 1] = tmp.g;
-      pColors[i * 3 + 2] = tmp.b;
-    }
-    pGeo.attributes.color!.needsUpdate = true;
-  }
 
   // --- post-processing ---
   const composer = new EffectComposer(renderer);
@@ -201,13 +110,12 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
   let height = 1;
   function applyQuality() {
     q = qualities[qualityKey];
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.maxDpr));
-    composer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.maxDpr));
+    const dpr = Math.min(window.devicePixelRatio || 1, q.maxDpr);
+    renderer.setPixelRatio(dpr);
+    composer.setPixelRatio(dpr);
     composer.setSize(width, height);
     bloom.setSize(Math.max(1, width * q.bloomScale), Math.max(1, height * q.bloomScale));
     bloom.enabled = q.bloom;
-    pGeo.setDrawRange(0, q.particles);
-    linkGeo.setDrawRange(0, q.links * 2);
   }
 
   // --- layout / focus ---
@@ -223,7 +131,6 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
     if (focus === "top") return { x: 0, y: visibleHalfH * 0.64, s: fit * 0.5 };
     return { x: 0, y: visibleHalfH * 0.04, s: fit };
   }
-
   function resize() {
     const r = canvas.getBoundingClientRect();
     width = Math.max(1, Math.round(r.width));
@@ -240,14 +147,88 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
   const ro = new ResizeObserver(resize);
   ro.observe(canvas);
 
-  // --- input: faint parallax ---
+  // --- ring position: `ringPos` is fractional while moving, `target` an integer once released ---
+  let ringPos = mod(opts.initialIndex, N);
+  let target: number | null = ringPos;
+  let shown = mod(Math.round(ringPos), N);
+  const indexNow = () => mod(Math.round(ringPos), N);
+
+  function step(delta: number) {
+    target = Math.round(target ?? ringPos) + delta;
+  }
+  function select(index: number) {
+    const diff = mod(index - indexNow() + N / 2, N) - N / 2;
+    target = Math.round(ringPos) + diff;
+  }
+
+  // --- input: drag / swipe, wheel, tap-to-select ---
   const pointer = { x: 0, y: 0, sx: 0, sy: 0 };
-  const onPointer = (e: PointerEvent) => {
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  let drag: { id: number; x0: number; pos0: number; lastX: number; lastT: number; vel: number; moved: boolean } | null = null;
+
+  const onDown = (e: PointerEvent) => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    canvas.setPointerCapture(e.pointerId);
+    drag = { id: e.pointerId, x0: e.clientX, pos0: ringPos, lastX: e.clientX, lastT: e.timeStamp, vel: 0, moved: false };
+  };
+  const onMove = (e: PointerEvent) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x0;
+    if (!drag.moved && Math.abs(dx) > 6) drag.moved = true;
+    if (!drag.moved) return;
+    target = null;
+    ringPos = drag.pos0 - dx / DRAG_PX_PER_STEP;
+    const dt = Math.max(1, e.timeStamp - drag.lastT);
+    drag.vel = (-(e.clientX - drag.lastX) / DRAG_PX_PER_STEP / dt) * 1000; // steps per second
+    drag.lastX = e.clientX;
+    drag.lastT = e.timeStamp;
+  };
+  const onUp = (e: PointerEvent) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    if (d.moved) {
+      const fling = Math.abs(d.vel) > 0.8 ? Math.sign(d.vel) * Math.min(2, Math.abs(d.vel) * 0.25) : 0;
+      target = Math.round(ringPos + fling);
+      return;
+    }
+    // a tap: choose a core in the ring, or just report the tap
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects(cores.map((c) => c.pick), false);
+    const idx = hits[0]?.object.userData.index as number | undefined;
+    if (idx !== undefined && idx !== indexNow()) select(idx);
+    else opts.onTap();
+  };
+  const onCancel = () => {
+    if (drag?.moved) target = Math.round(ringPos);
+    drag = null;
+  };
+  let wheelAcc = 0;
+  let wheelLock = 0;
+  const onWheel = (e: WheelEvent) => {
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; // vertical wheel keeps its normal meaning
+    e.preventDefault();
+    wheelAcc += e.deltaX;
+    if (Math.abs(wheelAcc) > 50 && performance.now() > wheelLock) {
+      step(Math.sign(wheelAcc));
+      wheelLock = performance.now() + 380;
+      wheelAcc = 0;
+    }
+  };
+  canvas.addEventListener("pointerdown", onDown);
+  canvas.addEventListener("pointermove", onMove);
+  canvas.addEventListener("pointerup", onUp);
+  canvas.addEventListener("pointercancel", onCancel);
+  canvas.addEventListener("wheel", onWheel, { passive: false });
+  const onWindowPointer = (e: PointerEvent) => {
     if (e.pointerType !== "mouse" || opts.reduceMotion) return;
     pointer.x = (e.clientX / innerWidth) * 2 - 1;
     pointer.y = (e.clientY / innerHeight) * 2 - 1;
   };
-  addEventListener("pointermove", onPointer, { passive: true });
+  addEventListener("pointermove", onWindowPointer, { passive: true });
 
   const onLost = (e: Event) => {
     e.preventDefault();
@@ -264,7 +245,7 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
 
   // --- loop ---
   let voiceState: VoiceState = "idle";
-  let energy = 0; // eased "excitement": listening / speaking
+  let energy = 0;
   let raf = 0;
   let last = performance.now();
   let t = 0;
@@ -278,40 +259,36 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
     last = now;
     t += dt;
 
+    // ring position eases toward its target
+    if (target !== null) {
+      const k = 1 - Math.exp(-dt * 7);
+      ringPos += (target - ringPos) * k;
+      if (Math.abs(target - ringPos) < 0.0008) ringPos = target;
+    }
+    spin.rotation.y = -ringPos * STEP;
+    const idx = indexNow();
+    if (idx !== shown) {
+      shown = idx;
+      opts.onSelect(idx);
+    }
+
     const level = opts.getLevel(dt);
     const eTarget = voiceState === "listening" ? 0.6 : voiceState === "speaking" ? 0.35 : 0;
     energy += (eTarget - energy) * (1 - Math.exp(-dt * 4));
-    const idlePulse = Math.sin(t * 1.4) * 0.04 * motion;
     const boost = level + energy;
 
-    heart.scale.setScalar(1 + idlePulse + level * 0.35);
-    halo.scale.setScalar(1 + idlePulse * 2 + boost * 0.4);
-    haloMat.opacity = 0.14 + boost * 0.22;
-    shell.rotation.y += dt * 0.12 * motion * (1 + energy);
-    shell.rotation.x += dt * 0.05 * motion;
-    outer.rotation.y -= dt * 0.07 * motion;
-    outer.rotation.z += dt * 0.03 * motion;
-    for (const r of rings) r.mesh.rotation.z += dt * r.speed * motion * (1 + energy * 1.5 + level);
-    linkMat.opacity = 0.18 + boost * 0.25;
-    shellMat.opacity = 0.26 + boost * 0.25;
+    const frameInfo = { dt, t, level, energy, motion, reduceMotion: opts.reduceMotion, quality: q };
+    cores.forEach((c, i) => {
+      const d = Math.abs(mod(i - ringPos + N / 2, N) - N / 2); // distance in steps from the front
+      const a = clamp01(1 - d);
+      c.update(frameInfo, a * a * (3 - 2 * a)); // smoothstep
+    });
     bloom.strength = (0.55 + boost * 0.8) * theme.glowStrength;
-
-    for (let i = 0; i < q.particles; i++) {
-      const o = orbit[i]!;
-      o.a += dt * o.speed * motion * (1 + energy);
-      const rr = o.r + Math.sin(t * 0.6 + o.wob) * 0.06 * motion + level * 0.15;
-      const x = Math.cos(o.a) * rr;
-      const z = Math.sin(o.a) * rr;
-      pPos[i * 3] = x;
-      pPos[i * 3 + 1] = z * Math.sin(o.tilt);
-      pPos[i * 3 + 2] = z * Math.cos(o.tilt);
-    }
-    pGeo.attributes.position!.needsUpdate = true;
 
     pointer.sx += (pointer.x - pointer.sx) * 0.05;
     pointer.sy += (pointer.y - pointer.sy) * 0.05;
-    root.rotation.y = pointer.sx * 0.18;
-    root.rotation.x = pointer.sy * 0.12;
+    root.rotation.y = pointer.sx * 0.12;
+    root.rotation.x = pointer.sy * 0.08;
 
     const ft = focusTarget();
     const k = 1 - Math.exp(-dt * 5);
@@ -321,10 +298,8 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
     root.position.copy(pos);
     root.scale.setScalar(scale);
 
-    if (rainbow) paintRainbow(now / 1000, q.particles);
     composer.render(dt);
 
-    // step quality down if frames stay slow
     slow += dt > 0.034 ? 1 : 0;
     if (++frames === 90) {
       if (slow > 36 && qualityKey !== "minimal") {
@@ -356,21 +331,22 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
     setVoiceState(s) {
       voiceState = s;
     },
-    setPalette(p) {
-      rainbow = !!p.rainbow;
-      glow.set(p.glow);
-      highlight.set(p.highlight);
-      line.set(p.line);
-      if (!rainbow) paintStatic();
-    },
+    step,
+    select,
     dispose() {
       stop();
       ro.disconnect();
-      removeEventListener("pointermove", onPointer);
+      removeEventListener("pointermove", onWindowPointer);
       document.removeEventListener("visibilitychange", onVisibility);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("pointercancel", onCancel);
+      canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("webglcontextlost", onLost);
       canvas.removeEventListener("webglcontextrestored", onRestored);
-      disposables.forEach((d) => d.dispose());
+      cores.forEach((c) => c.dispose());
+      disposeSharedParts(shared);
       composer.dispose();
       renderer.dispose();
     },

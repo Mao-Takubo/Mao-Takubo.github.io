@@ -777,6 +777,10 @@ npm run preview    # 本番ビルドの確認
 
 Node.js は 22.12 以上（`.nvmrc` は 22）。依存は three 0.170.0 / vite 8 / typescript 7 / vitest 4。
 
+## コアの色（リング）
+
+8色（AMBER / GOLD / CYAN / CRIMSON / VIOLET / EMERALD / ICE / RAINBOW）のコアが土星の輪のように並び、左右のドラッグ・スワイプ、矢印ボタン、←→キー、横スクロール、横のコアのタップで回せます。正面に来たコアだけが動き、パネルの色も連動します。色は `src/config/theme.ts` の `palettes` で追加・変更できます。
+
 ## 編集箇所
 
 | 目的 | ファイル |
