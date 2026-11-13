@@ -24,6 +24,15 @@ describe("matchCommand", () => {
     expect(id("すてーたす")).toBe("status");
     expect(id("ＨＥＬＰ")).toBe("help");
   });
+  it("accepts katakana/English readings and hiragana", () => {
+    expect(id("リサーチ")).toBe("research");
+    expect(id("リサーチを見せて")).toBe("research");
+    expect(id("パブリケーションズ")).toBe("publications");
+    expect(id("パブリケーション")).toBe("publications");
+    expect(id("Publications")).toBe("publications");
+    expect(id("ぎょうせき")).toBe("publications");
+    expect(id("けんきゅう")).toBe("research");
+  });
   it("reports ambiguity instead of picking one", () => {
     expect(matchCommand("ステータスと研究")).toEqual({
       type: "ambiguous",
