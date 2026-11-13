@@ -1,0 +1,12 @@
+{
+  "welcome": { "text": "何をする？", "path": null },
+  "status": { "text": "ステータスを表示する", "path": null },
+  "research": { "text": "研究内容を表示する", "path": null },
+  "publications": { "text": "業績を表示する", "path": null },
+  "projects": { "text": "プロジェクトを表示する", "path": null },
+  "contact": { "text": "連絡先を表示する", "path": null },
+  "help": { "text": "選べる項目を表示する", "path": null },
+  "back": { "text": "ホームに戻る", "path": null },
+  "unknown": { "text": "もう一度話すか、項目を選んでください", "path": null },
+  "ambiguous": { "text": "項目を一つ選んでください", "path": null }
+}

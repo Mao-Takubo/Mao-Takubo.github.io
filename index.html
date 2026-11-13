@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#050507" />
+    <title>MAO CORE — Mao Takubo / 田窪真大</title>
+    <meta name="description" content="田窪真大（Mao Takubo）の個人ホームページ。発光コアに話しかけて、プロフィール・研究・プロジェクトを開けます。" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <div id="app" data-focus="center" data-voice="idle" data-panel="">
+      <canvas id="core-canvas" aria-hidden="true"></canvas>
+      <div class="core-fallback" aria-hidden="true"><i></i><i></i><i></i></div>
+
+      <header class="hud-top">
+        <span class="brand">MAO CORE</span>
+        <span class="owner">Mao Takubo / 田窪真大</span>
+      </header>
+
+      <div id="boot" class="boot">
+        <p class="boot-hint">コアに話しかけて、プロフィールや研究を開きます</p>
+        <div class="boot-actions">
+          <button id="boot-start" type="button" class="btn btn-primary">クリックして起動</button>
+          <button id="boot-silent" type="button" class="btn">音声なしで見る</button>
+        </div>
+      </div>
+
+      <main class="stage">
+        <section id="panel" class="panel" aria-labelledby="panel-title" hidden>
+          <div class="panel-inner">
+            <header class="panel-head">
+              <div>
+                <span id="panel-tag" class="panel-tag"></span>
+                <h2 id="panel-title" tabindex="-1"></h2>
+              </div>
+              <button id="panel-close" type="button" class="icon-btn" aria-label="パネルを閉じる">×</button>
+            </header>
+            <div id="panel-body" class="panel-body"></div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="hud-bottom">
+        <p id="subtitle" class="subtitle"></p>
+        <p id="transcript" class="transcript"></p>
+        <p id="notice" class="notice" hidden></p>
+        <button id="replay" type="button" class="btn btn-small" hidden>▶ 音声を再生</button>
+        <nav id="menu" class="menu" aria-label="メニュー"></nav>
+        <div class="controls">
+          <button id="speak" type="button" class="btn btn-primary speak" aria-pressed="false">
+            <span class="speak-dot" aria-hidden="true"></span><span id="speak-label">SPEAK</span>
+          </button>
+          <button id="mute" type="button" class="btn btn-small" aria-pressed="false">音声 ON</button>
+        </div>
+        <p class="privacy">音声認識はブラウザのサービスへ送信される場合があります。クリックでも操作できます。</p>
+      </footer>
+
+      <div id="sr-live" class="sr-only" aria-live="polite"></div>
+    </div>
+
+    <noscript>
+      <div class="noscript">
+        <h1>Mao Takubo / 田窪真大</h1>
+        <p>愛媛大学の学生。大規模言語モデルとマルチモーダルAIに関心があります。</p>
+        <ul>
+          <li><a href="https://github.com/Mao-Takubo">GitHub</a></li>
+          <li><a href="mailto:takubo@ai.cs.ehime-u.ac.jp">Email</a></li>
+        </ul>
+        <p>このサイトの操作にはJavaScriptが必要です。</p>
+      </div>
+    </noscript>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
