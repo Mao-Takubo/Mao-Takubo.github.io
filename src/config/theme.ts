@@ -37,6 +37,7 @@ export interface Palette {
 
 export const palettes: Palette[] = [
   { id: "amber", label: "AMBER", glow: "#FF9D23", highlight: "#FFE2A1", line: "#8A501E" },
+  { id: "gold", label: "GOLD", glow: "#FFC82E", highlight: "#FFF0B0", line: "#8A6A12" },
   { id: "cyan", label: "CYAN", glow: "#28D7FF", highlight: "#B8F3FF", line: "#14697F" },
   { id: "crimson", label: "CRIMSON", glow: "#FF3B4E", highlight: "#FFB3BA", line: "#7A1C28" },
   { id: "violet", label: "VIOLET", glow: "#A56BFF", highlight: "#E1CCFF", line: "#503187" },

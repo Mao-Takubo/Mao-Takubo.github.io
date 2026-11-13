@@ -173,7 +173,8 @@ button { font: inherit; color: inherit; }
 @media (max-width: 820px), (max-aspect-ratio: 1/1) {
   .hud-top { padding: 0.8rem 1rem; }
   .owner { display: none; }
-  .hud-top { padding: 0.5rem 0.6rem 0.5rem 1rem; }
+  .hud-top { padding: 0.5rem 0.4rem 0.5rem 1rem; }
+  .swatch { width: 30px; height: 36px; }
   .panel { left: 3vw; right: 3vw; width: auto; top: auto; bottom: 0; max-height: 100%; transform: translateY(24px); }
   .panel.is-open { transform: none; }
   .stage { position: relative; }
