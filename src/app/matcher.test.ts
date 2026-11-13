@@ -26,6 +26,8 @@ describe("matchCommand", () => {
   });
   it("accepts katakana/English readings and hiragana", () => {
     expect(id("リサーチ")).toBe("research");
+    expect(id("リサーチ。")).toBe("research");
+    expect(id("パブリケーションズ。")).toBe("publications");
     expect(id("リサーチを見せて")).toBe("research");
     expect(id("パブリケーションズ")).toBe("publications");
     expect(id("パブリケーション")).toBe("publications");
