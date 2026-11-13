@@ -3,7 +3,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { qualities, theme, type Quality } from "../config/theme";
+import { qualities, theme, rainbowHue, type Palette, type Quality } from "../config/theme";
 import type { VoiceState } from "../app/state";
 
 export type CoreFocus = "center" | "side" | "top";
@@ -11,6 +11,7 @@ export type CoreFocus = "center" | "side" | "top";
 export interface Core {
   setFocus(focus: CoreFocus): void;
   setVoiceState(state: VoiceState): void;
+  setPalette(palette: Palette): void;
   dispose(): void;
 }
 
@@ -54,9 +55,13 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
     return null;
   }
 
-  const glow = new THREE.Color(theme.glow);
-  const highlight = new THREE.Color(theme.highlight);
-  const line = new THREE.Color(theme.line);
+  const palette = {
+    glow: new THREE.Color(theme.glow),
+    highlight: new THREE.Color(theme.highlight),
+    line: new THREE.Color(theme.line),
+  };
+  const { glow, highlight, line } = palette;
+  let rainbow = false;
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(theme.bg, CAMERA_Z - 1.5, CAMERA_Z + 3.2); // dims the far side of the core
@@ -88,19 +93,19 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
 
   // --- rings: differing thickness, partial arcs, own axis and speed ---
   const ringSpecs = [
-    { r: 1.55, tube: 0.012, arc: TAU, tilt: [1.2, 0.2], speed: 0.35, color: glow },
-    { r: 1.95, tube: 0.022, arc: 4.4, tilt: [0.4, 0.9], speed: -0.22, color: highlight },
-    { r: 2.25, tube: 0.008, arc: TAU, tilt: [-0.9, 0.5], speed: 0.14, color: line },
-    { r: 1.2, tube: 0.03, arc: 2.3, tilt: [0.1, -1.1], speed: 0.6, color: glow },
+    { r: 1.55, tube: 0.012, arc: TAU, tilt: [1.2, 0.2], speed: 0.35, role: "glow" },
+    { r: 1.95, tube: 0.022, arc: 4.4, tilt: [0.4, 0.9], speed: -0.22, role: "highlight" },
+    { r: 2.25, tube: 0.008, arc: TAU, tilt: [-0.9, 0.5], speed: 0.14, role: "line" },
+    { r: 1.2, tube: 0.03, arc: 2.3, tilt: [0.1, -1.1], speed: 0.6, role: "glow" },
   ] as const;
   const rings = ringSpecs.map((s) => {
-    const mat = track(new THREE.MeshBasicMaterial({ color: s.color, transparent: true, opacity: 0.85 }));
+    const mat = track(new THREE.MeshBasicMaterial({ color: palette[s.role], transparent: true, opacity: 0.85 }));
     const mesh = new THREE.Mesh(track(new THREE.TorusGeometry(s.r, s.tube, 8, 160, s.arc)), mat);
     const pivot = new THREE.Group();
     pivot.rotation.set(s.tilt[0], s.tilt[1], 0);
     pivot.add(mesh);
     root.add(pivot);
-    return { mesh, speed: s.speed };
+    return { mesh, mat, role: s.role, speed: s.speed };
   });
 
   // --- links between the two shells (static; thinned by quality) ---
@@ -143,10 +148,44 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
   const pGeo = track(new THREE.BufferGeometry());
   pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
   const dot = track(roundSprite());
+  const pColors = new Float32Array(maxParticles * 3).fill(1);
+  pGeo.setAttribute("color", new THREE.BufferAttribute(pColors, 3));
   const pMat = track(
-    new THREE.PointsMaterial({ map: dot, color: highlight, size: 0.07, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }),
+    new THREE.PointsMaterial({ map: dot, color: highlight, vertexColors: true, size: 0.07, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }),
   );
   root.add(new THREE.Points(pGeo, pMat));
+
+  // --- colour: fixed palette, or a rainbow recomputed every frame ---
+  const tmp = new THREE.Color();
+  const hsl = (h: number, sat: number, light: number) => tmp.setHSL(((h % 1) + 1) % 1, sat, light, THREE.SRGBColorSpace);
+  function paintStatic() {
+    heartMat.color.copy(highlight).lerp(glow, 0.5);
+    haloMat.color.copy(glow);
+    shellMat.color.copy(glow);
+    outerMat.color.copy(line);
+    for (const r of rings) r.mat.color.copy(palette[r.role]);
+    linkMat.color.copy(glow);
+    pMat.color.copy(highlight);
+    pColors.fill(1);
+    pGeo.attributes.color!.needsUpdate = true;
+  }
+  function paintRainbow(t: number, count: number) {
+    const h = rainbowHue(t, opts.reduceMotion);
+    heartMat.color.copy(hsl(h, 1, 0.8));
+    haloMat.color.copy(hsl(h, 1, 0.55));
+    shellMat.color.copy(hsl(h + 0.08, 1, 0.55));
+    outerMat.color.copy(hsl(h + 0.5, 0.8, 0.4));
+    rings.forEach((r, i) => r.mat.color.copy(hsl(h + i * 0.22, 1, r.role === "line" ? 0.45 : 0.6)));
+    linkMat.color.copy(hsl(h + 0.3, 1, 0.55));
+    pMat.color.setRGB(1, 1, 1);
+    for (let i = 0; i < count; i++) {
+      hsl(h + i / count, 1, 0.65);
+      pColors[i * 3] = tmp.r;
+      pColors[i * 3 + 1] = tmp.g;
+      pColors[i * 3 + 2] = tmp.b;
+    }
+    pGeo.attributes.color!.needsUpdate = true;
+  }
 
   // --- post-processing ---
   const composer = new EffectComposer(renderer);
@@ -282,6 +321,7 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
     root.position.copy(pos);
     root.scale.setScalar(scale);
 
+    if (rainbow) paintRainbow(now / 1000, q.particles);
     composer.render(dt);
 
     // step quality down if frames stay slow
@@ -315,6 +355,13 @@ export function createCore(canvas: HTMLCanvasElement, opts: CoreOptions): Core |
     },
     setVoiceState(s) {
       voiceState = s;
+    },
+    setPalette(p) {
+      rainbow = !!p.rainbow;
+      glow.set(p.glow);
+      highlight.set(p.highlight);
+      line.set(p.line);
+      if (!rainbow) paintStatic();
     },
     dispose() {
       stop();

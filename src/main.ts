@@ -1,5 +1,5 @@
 import "./styles/main.css";
-import { applyThemeToCss } from "./config/theme";
+import { applyPaletteToCss, applyThemeToCss, defaultPalette, palettes, rainbowCss, rainbowHue, type Palette } from "./config/theme";
 import { createStore, initialState } from "./app/state";
 import { createController } from "./app/commands";
 import { createAudioLevel } from "./core/audioReactive";
@@ -8,11 +8,13 @@ import { createVoice } from "./services/voice";
 import { createRecognizer } from "./services/recognition";
 import { createNavigation } from "./ui/navigation";
 import { createPanels } from "./ui/panels";
+import { createPalettePicker } from "./ui/palette";
 import { required } from "./ui/dom";
 
 /** Keep in sync with the stacked-layout @media query in main.css. */
 const STACKED = "(max-width: 820px), (max-aspect-ratio: 1/1)";
 const MUTE_KEY = "mao-core:muted";
+const PALETTE_KEY = "mao-core:palette";
 
 function readMuted(): boolean {
   try {
@@ -26,6 +28,14 @@ function saveMuted(m: boolean) {
     localStorage.setItem(MUTE_KEY, m ? "1" : "0");
   } catch {
     /* storage unavailable */
+  }
+}
+
+function readPalette(): Palette {
+  try {
+    return palettes.find((p) => p.id === localStorage.getItem(PALETTE_KEY)) ?? defaultPalette;
+  } catch {
+    return defaultPalette;
   }
 }
 
@@ -72,6 +82,28 @@ store.subscribe((s, prev) => {
 });
 stacked.addEventListener("change", syncCore);
 syncCore();
+
+// --- core colour: chosen palette, remembered; rainbow also recolours the HUD ---
+let rainbowTimer = 0;
+function setPalette(p: Palette) {
+  window.clearInterval(rainbowTimer);
+  core?.setPalette(p);
+  if (p.rainbow) {
+    const tick = () => applyPaletteToCss(rainbowCss(rainbowHue(performance.now() / 1000, reduceMotion.matches)));
+    tick();
+    if (!reduceMotion.matches) rainbowTimer = window.setInterval(() => !document.hidden && tick(), 100);
+  } else {
+    applyPaletteToCss(p);
+  }
+  try {
+    localStorage.setItem(PALETTE_KEY, p.id);
+  } catch {
+    /* storage unavailable */
+  }
+}
+const initialPalette = readPalette();
+createPalettePicker(initialPalette, setPalette);
+setPalette(initialPalette);
 
 void voice.load();
 
